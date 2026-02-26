@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+.theme-dark {
+  @apply bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-slate-100;
+}
+
+.theme-light {
+  @apply bg-gradient-to-br from-slate-100 via-cyan-50 to-violet-100 text-slate-900;
+}
+
+.glass-panel {
+  @apply rounded-2xl border border-white/20 bg-white/10 backdrop-blur-lg;
+}
