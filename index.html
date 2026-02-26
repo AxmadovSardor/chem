@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Organic Chemistry Map</title>
+  <style>
+    :root { --bg:#0b1220; --panel:rgba(255,255,255,.08); --text:#e6edf8; --muted:#b8c1d6; }
+    body.light { --bg:#eef3ff; --panel:rgba(255,255,255,.65); --text:#112; --muted:#334; }
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui;background:var(--bg);color:var(--text)}
+    .wrap{padding:16px;display:grid;gap:12px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+    .glass{background:var(--panel);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.2);border-radius:14px}
+    .grid{display:grid;grid-template-columns:2fr 1fr;gap:12px} @media(max-width:980px){.grid{grid-template-columns:1fr}}
+    .controls{display:grid;grid-template-columns:1fr auto auto;gap:8px}
+    input,select,button{padding:9px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:#1118;color:var(--text)}
+    body.light input,body.light select,body.light button{background:#fff;color:#112}
+    #mapBox{height:68vh;position:relative;overflow:hidden}
+    #map{width:100%;height:100%;touch-action:none;cursor:grab}
+    #map:active{cursor:grabbing}
+    .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding:8px}
+    .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
+    .tooltip{position:absolute;pointer-events:none;background:#000c;color:#fff;padding:6px 8px;border-radius:8px;font-size:12px;display:none;max-width:300px}
+    .panel{padding:12px;max-height:68vh;overflow:auto}
+    h1,h2,h3{margin:.25rem 0} ul{margin:.35rem 0 .35rem 18px}
+    .sec{padding:8px;border-radius:10px;background:#0003;border:1px solid rgba(255,255,255,.15);margin-top:8px}
+    .mini{font-size:13px;color:var(--muted)} .pill{padding:5px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.2);cursor:pointer}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Organic Chemistry Map</h1>
+        <div class="mini">Interactive Cambridge AS/A-Level chemistry mind map</div>
+      </div>
+      <button id="themeBtn">Toggle Theme</button>
+    </div>
+
+    <div class="controls">
+      <input id="search" placeholder="Search by name or formula" />
+      <select id="difficulty"><option>ALL</option><option>AS</option><option>A2</option></select>
+      <button id="pathBtn">Show Synthesis Path</button>
+    </div>
+
+    <div class="grid">
+      <div class="glass" id="mapBox">
+        <svg id="map" viewBox="0 0 1200 800"></svg>
+        <div class="tooltip" id="tip"></div>
+        <div class="legend">
+          <span><i class="dot" style="background:#60a5fa"></i>Functional groups</span>
+          <span><i class="dot" style="background:#34d399"></i>Reaction types</span>
+          <span><i class="dot" style="background:#fb923c"></i>Mechanisms</span>
+          <span><i class="dot" style="background:#f472b6"></i>Structure concepts</span>
+        </div>
+      </div>
+      <div class="glass panel" id="detail">Click a node to view full details.</div>
+    </div>
+
+    <div class="grid" style="grid-template-columns:1fr 1fr;">
+      <div class="glass panel" id="learning"></div>
+      <div class="glass panel" id="pathway"></div>
+    </div>
+  </div>
+
+<script>
+const colors={functional:'#60a5fa',reaction:'#34d399',mechanism:'#fb923c',structure:'#f472b6'};
+const nodes=[
+{id:'hydrocarbons',name:'Hydrocarbons',c:'functional',d:'AS',f:'C,H only',formula:'varies',group:'C-C/C-H',props:['Non-polar','Insoluble'],rx:['Combustion'],iso:['Chain']},
+{id:'alkanes',name:'Alkanes',c:'functional',d:'AS',f:'Saturated hydrocarbons',formula:'CₙH₂ₙ₊₂',group:'single bonds',props:['Less reactive'],rx:['Free radical substitution (UV)'],iso:['Chain']},
+{id:'alkenes',name:'Alkenes',c:'functional',d:'AS',f:'Contains C=C',formula:'CₙH₂ₙ',group:'C=C',props:['Reactive π bond'],rx:['Electrophilic addition','Hydrogenation (Ni)'],iso:['Positional','cis/trans']},
+{id:'alkynes',name:'Alkynes',c:'functional',d:'A2',f:'Contains C≡C',formula:'CₙH₂ₙ₋₂',group:'C≡C',props:['Linear around triple bond'],rx:['Electrophilic addition'],iso:['Positional']},
+{id:'halogenoalkanes',name:'Halogenoalkanes',c:'functional',d:'AS',f:'R-X compounds',formula:'R-X',group:'C-X',props:['Polar bond'],rx:['Nucleophilic substitution'],iso:['Positional']},
+{id:'alcohols',name:'Alcohols',c:'functional',d:'AS',f:'Contains -OH',formula:'R-OH',group:'-OH',props:['Hydrogen bonding'],rx:['Oxidation','Substitution'],iso:['Functional']},
+{id:'aldehydes',name:'Aldehydes',c:'functional',d:'A2',f:'Terminal carbonyl',formula:'R-CHO',group:'-CHO',props:['Polar'],rx:['Nucleophilic addition'],iso:['Chain']},
+{id:'ketones',name:'Ketones',c:'functional',d:'A2',f:'Internal carbonyl',formula:'R-CO-R',group:'>C=O',props:['Polar'],rx:['Nucleophilic addition'],iso:['Positional']},
+{id:'carboxylic-acids',name:'Carboxylic acids',c:'functional',d:'AS',f:'Contains -COOH',formula:'R-COOH',group:'-COOH',props:['Weak acid'],rx:['Esterification'],iso:['Functional']},
+{id:'esters',name:'Esters',c:'functional',d:'AS',f:'Contains -COO-',formula:'R-COO-R',group:'-COO-',props:['Fragrant'],rx:['Hydrolysis'],iso:['Functional']},
+{id:'amines',name:'Amines',c:'functional',d:'A2',f:'Nitrogen lone pair',formula:'R-NH₂',group:'-NH₂',props:['Basic'],rx:['Nucleophilic substitution prep'],iso:['Chain']},
+{id:'polymers',name:'Polymers',c:'reaction',d:'A2',f:'Large chain molecules',formula:'[monomer]ₙ',group:'repeat unit',props:['High Mr'],rx:['Addition polymerisation'],iso:['-']},
+{id:'isomerism',name:'Isomerism',c:'structure',d:'AS',f:'Same formula, diff arrangement',formula:'same molecular formula',group:'concept',props:['Different properties'],rx:['-'],iso:['Structural','Geometric','Optical']},
+{id:'mechanisms',name:'Reaction mechanisms',c:'mechanism',d:'AS',f:'Curly-arrow electron flow',formula:'process topic',group:'concept',props:['Explains reactivity'],rx:['FRS','EA','SN','NA'],iso:['-']},
+{id:'redox',name:'Oxidation & reduction',c:'reaction',d:'AS',f:'O/H change at carbon',formula:'concept',group:'concept',props:['Interconversion tool'],rx:['Alcohol oxidation'],iso:['-']},
+{id:'cracking',name:'Cracking & hydrogenation',c:'reaction',d:'AS',f:'Industrial hydrocarbon processes',formula:'concept',group:'concept',props:['Fuel/unsaturation control'],rx:['Cracking','Hydrogenation'],iso:['-']},
+{id:'sigma-pi',name:'σ and π bonds',c:'structure',d:'AS',f:'Head-on vs side-on overlap',formula:'concept',group:'concept',props:['π more reactive'],rx:['Addition at π'],iso:['-']},
+{id:'hybrid',name:'Hybridisation',c:'structure',d:'AS',f:'sp³/sp²/sp shapes',formula:'sp³ sp² sp',group:'concept',props:['Geometry/bond angle'],rx:['-'],iso:['-']}
+];
+const links=[['hydrocarbons','alkanes','classification','functional'],['hydrocarbons','alkenes','classification','functional'],['hydrocarbons','alkynes','classification','functional'],['alkanes','halogenoalkanes','UV + halogen','mechanism'],['alkenes','alcohols','steam hydration','reaction'],['alkenes','polymers','addition polymerisation','reaction'],['halogenoalkanes','alcohols','aq OH⁻','mechanism'],['alcohols','aldehydes','[O] distil','reaction'],['aldehydes','carboxylic-acids','[O] reflux','reaction'],['carboxylic-acids','esters','esterification','mechanism'],['halogenoalkanes','amines','NH₃ ethanol','mechanism'],['alkenes','isomerism','cis/trans','structure'],['alkenes','sigma-pi','π reactivity','structure'],['alkynes','sigma-pi','2π in triple bond','structure'],['isomerism','hybrid','stereochemistry basis','structure'],['redox','alcohols','oxidation/reduction','reaction'],['cracking','alkenes','industrial source','reaction'],['alkenes','mechanisms','electrophilic addition','mechanism'],['alkanes','mechanisms','free radical substitution','mechanism'],['halogenoalkanes','mechanisms','nucleophilic substitution','mechanism'],['aldehydes','mechanisms','nucleophilic addition','mechanism']];
+
+const pos={};nodes.forEach((n,i)=>{const a=i/nodes.length*2*Math.PI;pos[n.id]={x:600+340*Math.cos(a),y:390+250*Math.sin(a)}});
+const svg=document.getElementById('map'), tip=document.getElementById('tip'), detail=document.getElementById('detail');
+let scale=1,tx=0,ty=0,isDrag=false,sx=0,sy=0,completed=new Set();
+
+function transform(){svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;}
+svg.addEventListener('wheel',e=>{e.preventDefault(); scale=Math.min(2.4,Math.max(.45,scale+(e.deltaY<0?.08:-.08))); transform();});
+svg.addEventListener('pointerdown',e=>{isDrag=true;sx=e.clientX-tx;sy=e.clientY-ty;svg.setPointerCapture(e.pointerId)});
+svg.addEventListener('pointermove',e=>{if(isDrag){tx=e.clientX-sx;ty=e.clientY-sy;transform();}});
+svg.addEventListener('pointerup',()=>isDrag=false);
+
+function showNode(n){
+  detail.innerHTML=`<h2>${n.name}</h2><div class='mini'>${n.f} | ${n.formula}</div>
+  ${sec('1️⃣ Definition',n.f)}
+  ${sec('2️⃣ General Formula',`<code>${n.formula}</code>`)}
+  ${sec('3️⃣ Functional Group',n.group+" (display + structural representation should be drawn in class notes)")}
+  ${sec('4️⃣ Physical Properties',list(n.props))}
+  ${sec('5️⃣ Chemical Reactions',list(n.rx)+"<div class='mini'>Include conditions/catalyst/equation in exam answers.</div>")}
+  ${sec('6️⃣ Mechanism Section',list(['Free radical substitution','Electrophilic addition','Nucleophilic substitution','Nucleophilic addition'])+"<div class='mini'>Animated curly arrows: use electron source → sink.</div>")}
+  ${sec('7️⃣ Isomerism Section',list(n.iso))}
+  ${sec('8️⃣ 3D Model Viewer',"Rotate/zoom model placeholder active in this lightweight build.")}
+  ${sec('9️⃣ Practice Questions',list(['MCQ: best reagent?','Mechanism drawing','Naming compounds','Isomer counting']))}
+  ${sec('🔟 Exam Tips Box',list(['State reagents + conditions explicitly','Don\'t mix aqueous vs ethanolic hydroxide','Use correct arrow conventions']))}`;
+}
+
+function sec(t,b){return `<div class='sec'><h3>${t}</h3>${b}</div>`}
+function list(a){return `<ul>${a.map(x=>`<li>${x}</li>`).join('')}</ul>`}
+
+function render(){
+  const q=document.getElementById('search').value.toLowerCase(); const d=document.getElementById('difficulty').value;
+  const allowed=nodes.filter(n=>(d==='ALL'||n.d===d)&&(`${n.name} ${n.formula}`.toLowerCase().includes(q)));
+  const ids=new Set(allowed.map(n=>n.id));
+  svg.innerHTML='';
+  links.filter(([a,b])=>ids.has(a)&&ids.has(b)).forEach(([a,b,l,t])=>{const p=pos[a],q=pos[b]; const e=document.createElementNS('http://www.w3.org/2000/svg','line');
+    e.setAttribute('x1',p.x);e.setAttribute('y1',p.y);e.setAttribute('x2',q.x);e.setAttribute('y2',q.y);e.setAttribute('stroke',colors[t]);e.setAttribute('stroke-width','2');e.setAttribute('opacity','.85');svg.appendChild(e);
+    const txt=document.createElementNS('http://www.w3.org/2000/svg','text');txt.textContent=l;txt.setAttribute('x',(p.x+q.x)/2);txt.setAttribute('y',(p.y+q.y)/2);txt.setAttribute('fill','#cbd5e1');txt.setAttribute('font-size','10');svg.appendChild(txt);
+  });
+  allowed.forEach(n=>{const p=pos[n.id];const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',p.x);c.setAttribute('cy',p.y);c.setAttribute('r','40');c.setAttribute('fill',colors[n.c]);c.setAttribute('stroke','#fff');c.setAttribute('stroke-width','1.2');
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');t.setAttribute('x',p.x);t.setAttribute('y',p.y+4);t.setAttribute('fill','#fff');t.setAttribute('font-size','11');t.setAttribute('text-anchor','middle');t.textContent=n.name;
+    g.append(c,t);svg.appendChild(g);
+    g.addEventListener('mouseenter',ev=>{tip.style.display='block'; tip.textContent=`${n.name}: ${n.f} | ${n.formula}`;});
+    g.addEventListener('mousemove',ev=>{tip.style.left=(ev.offsetX+12)+'px';tip.style.top=(ev.offsetY+12)+'px';});
+    g.addEventListener('mouseleave',()=>tip.style.display='none');
+    g.addEventListener('click',()=>showNode(n));
+    g.addEventListener('dblclick',()=>showPathways(n.id));
+  });
+  renderLearning(allowed);
+}
+function showPathways(id){const steps=links.filter(([a,b])=>a===id||b===id).map(([a,b,l])=>`${a} → ${b} (${l})`); document.getElementById('pathway').innerHTML=`<h2>Reaction Pathway Mode</h2>${list(steps.length?steps:['No direct edges'])}`;}
+function renderLearning(allowed){
+  const pct=Math.round((completed.size/Math.max(1,nodes.length))*100);
+  document.getElementById('learning').innerHTML=`<h2>Smart Learning Features</h2>
+  <div>Progress: ${pct}%</div><div class='sec'>Spaced repetition flashcards: prioritize uncompleted topics.</div>
+  <div class='sec'>Reaction pathway quiz mode: convert propene → propan-2-ol with reagents/conditions.</div>
+  <div class='sec'><b>Common exam trap alerts</b>${list(['Confusing SN conditions','Missing catalyst/temperature','Wrong curly arrow direction'])}</div>
+  <div class='sec'><b>Completion</b><div class='row'>${allowed.slice(0,8).map(n=>`<label class='pill'><input type='checkbox' data-c='${n.id}' ${completed.has(n.id)?'checked':''}/> ${n.name}</label>`).join('')}</div></div>
+  <div class='sec'><b>Compare compounds</b><div id='cmp' class='mini'>Alkenes vs Alkynes: CₙH₂ₙ (C=C) versus CₙH₂ₙ₋₂ (C≡C), with different degree of unsaturation and bond geometry.</div></div>
+  <div class='sec'><b>Advanced tools</b>${list(['Draw-your-own molecule tool (placeholder)','Interactive bond visualisation (σ vs π)','Isomer generator from formula (placeholder)'])}</div>`;
+  document.querySelectorAll('input[data-c]').forEach(cb=>cb.onchange=e=>{const id=e.target.getAttribute('data-c');e.target.checked?completed.add(id):completed.delete(id);renderLearning(allowed);});
+}
+
+document.getElementById('search').oninput=render;
+document.getElementById('difficulty').onchange=render;
+document.getElementById('themeBtn').onclick=()=>document.body.classList.toggle('light');
+document.getElementById('pathBtn').onclick=()=>{const s=prompt('Start compound id (e.g. alkenes)');const t=prompt('Target compound id (e.g. alcohols)');const key=`${s}->${t}`;const m={'alkenes->alcohols':['Hydration with steam','Catalyst: H₃PO₄','Mechanism: electrophilic addition'],'alcohols->carboxylic-acids':['Reflux with acidified K₂Cr₂O₇','Excess oxidant','Mechanism: oxidation']};document.getElementById('pathway').innerHTML=`<h2>Synthesis Path</h2>${list(m[key]||['No preset path found; inspect node connections via double-click.'])}`;};
+render();
+</script>
+</body>
+</html>
